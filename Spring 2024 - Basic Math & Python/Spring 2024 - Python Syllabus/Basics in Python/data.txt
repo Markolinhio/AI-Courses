@@ -1,0 +1,25 @@
+1, Everitt Palmer, IT, 2000, 80, 10, False
+Delmar Tollemache, IT, 2200, 70, 15, False
+Rosa Coke, IT, 2300, 75, 12, False
+Lowell Cokes, IT, 1900, 60, 17, False
+Abigayle Hedley, IT, 1500, 90, 19, False
+Rosalee Frank, IT, 2000, 80, 20, False
+Algar Woodrow, IT, 2100, 75, 15, False
+Jarod Sharpe, IT, 2800, 90, 8, False
+Alora Judd, IT, 2400, 80, 3, False
+Laverne Herberts, Marketing, 2800, 80, 15, False
+Indiana Varnham, Marketing, 2700, 70, 10, False
+Cash Emmitt, Marketing, 2600, 95, 20, False
+Kizzy Good, Marketing, 2800, 80, 10, False
+Kimber Kimberley, Marketing, 3200, 78, 4, False
+Eugenia Samuel, Quality Control, 1500, 84, 15, False
+Ilene Randall, Quality Control, 1700, 75, 12, False
+Bridget Paget, Quality Control, 1600, 81, 8, False
+Wardell Eaton, Quality Control, 1300, 88, 24, False
+Eloise Mathewson, Quality Control, 1800, 82, 20, False
+Earle Morriss, Quality Control, 2200, 75, 10, False
+Honey Carpenter, Security, 2600, 80, 8, False
+Justine Tolbert, Security, 2500, 95, 12, False
+Malinda Joyce, Security, 2700, 75, 15, False
+Norm Edwards, Security, 2500, 70, 10, False
+Jem Mann, Security, 3000, 90, 15, False
