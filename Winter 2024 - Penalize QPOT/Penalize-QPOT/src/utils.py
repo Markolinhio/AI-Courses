@@ -98,12 +98,12 @@ def compute_mu_and_L(F_obj):
         L: Smoothness parameter.
     """
     # Compute mu based on Lemma 6
-    mu = F_obj.eta  # Strong convexity parameter is eta
+    mu = 2 * F_obj.eta  # Strong convexity parameter is eta
 
     # Compute L based on Lemma 7
     n = F_obj.C.shape[0]  # Dimension of the cost matrix
     alpha = F_obj.alpha  # Penalty parameter
-    L = n * alpha  # Smoothness parameter is O(n * alpha)
+    L = mu + 4 * n * alpha  # Smoothness parameter is O(n * alpha)
 
     return mu, L
 

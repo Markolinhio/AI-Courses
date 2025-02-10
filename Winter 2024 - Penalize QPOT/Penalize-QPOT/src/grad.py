@@ -232,7 +232,10 @@ def nesterov_accelerated_gradient(
         X_new = project_onto_simplex(Y - (1 / L) * GRAD_Y, F.s)
 
         # Step 5: Update new Y
-        Y_new = X_new + (1 - np.sqrt(mu / L)) / (1 + np.sqrt(mu / L)) * (X_new - X)
+        decay = (1 - decay_rate) if k % step == 0 and not line_search else 1
+        Y_new = X_new + decay * (1 - np.sqrt(mu / L)) / (1 + np.sqrt(mu / L)) * (
+            X_new - X
+        )
 
         # Track history
         history.append(X_new.flatten())
@@ -240,6 +243,7 @@ def nesterov_accelerated_gradient(
         objective_history.append(current_obj)
         current_P_alpha = F.P_alpha(X_new)
         penalty_history.append(current_P_alpha)
+        A_history.append(A_new)
 
         # Verbose output
         if verbose:
@@ -270,14 +274,9 @@ def nesterov_accelerated_gradient(
                 )
                 break
 
-        # Update learning rate with decay
-        if not line_search and k % step == 0:
-            L *= 1 - decay_rate
-
         # Update variables for next iteration
         A = A_new
         X = X_new
         Y = Y_new
-        A_history.append(A)
 
     return X_new, history, objective_history, penalty_history, A_history
