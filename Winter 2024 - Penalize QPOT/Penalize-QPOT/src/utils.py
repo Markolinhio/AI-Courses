@@ -103,7 +103,7 @@ def compute_mu_and_L(F_obj):
     # Compute L based on Lemma 7
     n = F_obj.C.shape[0]  # Dimension of the cost matrix
     alpha = F_obj.alpha  # Penalty parameter
-    L = mu + 4 * n * alpha  # Smoothness parameter is O(n * alpha)
+    L = mu + 6 * n * alpha  # Smoothness parameter is O(n * alpha)
 
     return mu, L
 
@@ -145,3 +145,29 @@ def validate_solution(F_obj, X_opt, epsilon_tolerance):
         f"{'Row failed with max difference: ' + row_max_diff  if not row_check else 'Row passed,'} "
         f"{'Column failed with max difference: ' + col_max_diff if not col_check else 'Col passed'}"
     )
+
+
+def measure_sparsity(solution_matrix, threshold=1e-10):
+    """
+    Hàm này đo lường sparsity của một ma trận, xem xét các phần tử có giá trị tuyệt đối
+    nhỏ hơn ngưỡng đã chỉ định là bằng 0.
+
+    Sparsity được định nghĩa là tỷ lệ các phần tử được xem là bằng 0 trong ma trận.
+
+    Tham số:
+    solution_matrix (np.ndarray): Ma trận cần đo lường sparsity.
+    threshold (float): Ngưỡng dưới đó các phần tử được coi là bằng 0 (mặc định là 1e-10).
+
+    Trả về:
+    float: Độ sparsity của ma trận, dưới dạng giá trị từ 0 đến 1.
+    """
+    # Đếm số lượng phần tử được coi là bằng 0 (nhỏ hơn ngưỡng)
+    zero_elements = np.sum(np.abs(solution_matrix) < threshold)
+
+    # Tính tổng số phần tử trong ma trận
+    total_elements = solution_matrix.size
+
+    # Tính độ sparsity dưới dạng tỷ lệ của các phần tử được coi là bằng 0
+    sparsity = zero_elements / total_elements
+
+    return sparsity

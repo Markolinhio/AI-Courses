@@ -19,8 +19,22 @@ def simplex_projection_1d(y):
     return np.maximum(y + lambda_val, 0)
 
 
-def project_onto_simplex(Y, s):
+def project_onto_simplex(Y, s, verbose=False):
     """Projects Y onto the simplex to enforce non-negativity and sum to size of s."""
     Y_flat = matrix_to_vector(Y)
+    if verbose:
+        print("Input dimension:", Y.shape)
+        print("Intemediary dimension:", Y_flat.shape)
+        print("Sorted dimension: ", np.sort(Y_flat / s)[::-1].shape)
+        print("Cumulative sum:", np.cumsum(np.sort(Y_flat / s)[::-1]))
+        print(
+            "rho:",
+            np.where(
+                np.sort(Y_flat / s)[::-1]
+                + (1 - np.cumsum(np.sort(Y_flat / s)[::-1]))
+                / (np.arange(len(Y_flat)) + 1)
+                > 0
+            )[0][-1],
+        )
     Y_projected = simplex_projection_1d(Y_flat / s)
     return vector_to_matrix(Y_projected * s, *Y.shape)

@@ -1,7 +1,7 @@
 import numpy
 from penalize_qpot import *
 from prox import project_onto_simplex
-from utils import validate_solution, compute_mu_and_L
+from utils import validate_solution, compute_mu_and_L, measure_sparsity
 
 
 def gradient_descent_f(f, X_init, lr=0.1, max_iter=1000, tol=1e-6):
@@ -41,15 +41,14 @@ def gradient_descent_f(f, X_init, lr=0.1, max_iter=1000, tol=1e-6):
 
 
 def proximal_gradient_descent(
-    F,
+    F_obj,
     X_init,
     lr=0.1,
     max_iter=1000,
     tol=1e-6,
     decay_rate=0.1,
     step=100,
-    eps_tol=1e-4,
-    early_stop=False,
+    early_stop=None,
     verbose=False,
 ):
     """
@@ -63,7 +62,6 @@ def proximal_gradient_descent(
         tol: Tolerance for stopping criterion.
         decay_rate: Rate at which the learning rate decays (default is 10%).
         step: Number of iter before decay
-        eps_tol: The threshold of epsilon convergence
         early_stop: If True, stops early if results don't change significantly in the last 5 iterations.
         verbose: If True, prints details of each iteration.
 
@@ -74,64 +72,76 @@ def proximal_gradient_descent(
     """
     X = X_init.copy()
     history = [X.flatten()]
-    objective_history = [F(X)]
+    objective_history = [F_obj(X)]
     penalty_history = []
     converge = False
     max_change = 9999
     if verbose:
         print(
-            "-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
+            "------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
         )
         print(
-            f"{'Iteration':<10}|{'Objective Value':<25}|{'f_eta(X)':<12}| {'P(X, alpha)':<22}|{'Sum(X)':<10}|{'Validation':<30}"
+            f"{'Iteration':<10}|{'Objective Value':<25}|{'f_eta(X)':<12}| {'P(X, alpha)':<22}|{'Sum(X)':<10}|{'Sparsity':<10}|{'Convergence':<30}"
         )
         print(
-            "-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
+            "------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
         )
     for k in range(max_iter):
         # Gradient descent step
-        grad = F.grad(X)
+        grad = F_obj.grad(X)
         Y = X - lr * grad
 
         # Proximal step: Project onto simplex
-        X_new = project_onto_simplex(Y, F.s)
+        X_new = project_onto_simplex(Y, F_obj.s)
 
         # Track history
         history.append(X_new.flatten())
-        current_obj = F(X_new)
-        objective_history.append(F(X_new))
-        current_P_alpha = F.P_alpha(X_new)  # Compute P(X, alpha)
+        current_obj = F_obj(X_new)
+        objective_history.append(F_obj(X_new))
+        current_P_alpha = F_obj.P_alpha(X_new)  # Compute P(X, alpha)
         penalty_history.append(current_P_alpha)
+
+        # Validation and check convergence result
+        validation_result = "PASS"
+        try:
+            validate_solution(F_obj, X_new, 0)
+            if measure_sparsity(X_new) >= 0.6:
+                converge = True
+            else:
+                converge = False
+                validation_result = "FAIL: Sparsity too low"
+        except AssertionError as e:
+            validation_result = f"{str(e)}"
+            converge = False
+
         # Verbose output
         if verbose:
-            current_f_eta = F.f_eta(X_new)  # Compute f_eta(X)
-            # Check projection status
-            sum_x = np.sum(X_new)
-            min_x = np.min(X_new)
-
-            # Validation result
-            validation_result = "PASS"
-            try:
-                validate_solution(F, X_new, eps_tol)
-                converge = True
-            except AssertionError as e:
-                validation_result = f"{str(e)}"
-
+            current_f_eta = F_obj.f_eta(X_new)  # Compute f_eta(X)
+            sum_X = np.sum(X_new)
+            convergence_status = "PASS" if converge else validation_result
+            sparsity = measure_sparsity(X_new)
             # Print debugging details in tabular format
             print(
-                f"{k + 1:<10}|{current_obj:<25.6f}| {current_f_eta:<11.6f}| {current_P_alpha:<22.6f}|{np.sum(X_new):<10.4f}|{validation_result:<30}"
+                f"{k + 1:<10}|{current_obj:<25.6f}| {current_f_eta:<11.6f}| {current_P_alpha:<22.6f}|{sum_X:<10.4f}|{sparsity:<10.4f}|{convergence_status:<30}"
             )
 
         # Early stopping: If the change in the last 5 objectives is very small
-        if early_stop and len(objective_history) > 5:
-            max_change = np.max(np.abs(np.diff(objective_history[-5:])))
-        if converge:
-            if early_stop and max_change < tol:
-                print(
-                    f"Early stopping activated at iteration {k + 1}: "
-                    f"Max change in last 5 objectives is {max_change:.6e}."
+        if isinstance(early_stop, int):
+            if early_stop > 0 and len(objective_history) > early_stop:
+                max_change = np.max(
+                    np.abs(np.diff(objective_history[-1 * early_stop :]))
                 )
-                break
+            if converge:
+                if (
+                    early_stop > 0
+                    and len(objective_history) > early_stop
+                    and max_change < tol
+                ):
+                    print(
+                        f"Early stopping activated at iteration {k + 1}: "
+                        f"Max change in last 5 objectives is {max_change:.6e}."
+                    )
+                    break
 
         # Update learning rate with decay
         if k % step == 0:
@@ -143,7 +153,7 @@ def proximal_gradient_descent(
 
 
 def nesterov_accelerated_gradient(
-    F,
+    F_obj,
     X_init,
     mu=None,
     L=None,
@@ -151,15 +161,22 @@ def nesterov_accelerated_gradient(
     tol=1e-6,
     step=50,
     decay_rate=0.5,
-    eps_tol=1e-4,
-    early_stop=False,
+    early_stop=None,
+    sparsity_threshold=0.6,  # Sparsity stopping criterion
+    sparsity_tol=1e-10,  # Threshold for counting sparse elements
     verbose=False,
     line_search=True,
     beta=0.3,  # Reduced beta for stricter line search
     L_init=1.0,
+    patience=100,  # Number of iterations to wait after last improvement
 ):
     """
-    Nesterov's Accelerated Gradient (NAG) method with adjustments for stability and constraints.
+    Nesterov's Accelerated Gradient (NAG) method with robust sparsity-based best solution tracking.
+
+    Includes:
+    - Best-solution tracking based on sparsity with convergence guarantee.
+    - Ensures that once a converged best solution is found, we do not continue needlessly.
+    - Within the patience window, updates to a better sparse solution if found.
 
     Args:
         F: Instance of the F class (objective function).
@@ -171,21 +188,25 @@ def nesterov_accelerated_gradient(
         step: Number of iterations before decaying the learning rate.
         decay_rate: Decay rate for learning rate.
         eps_tol: Epsilon tolerance for validation.
-        early_stop: If True, stops early if results don't change significantly in the last 5 iterations.
+        early_stop: If True, stops early if results don't change significantly in last `patience` iterations.
+        sparsity_threshold: If sparsity exceeds this value, include in convergence check.
+        sparsity_tol: Value threshold to consider elements as zero.
         verbose: If True, prints details of each iteration.
         line_search: If True, uses backtracking line search to estimate L.
         beta: Reduction factor for line search (default 0.3).
         L_init: Initial guess for L in line search.
+        patience: Number of iterations to wait before stopping after last improvement.
 
     Returns:
-        X_opt: Optimized X.
+        X_best: Best solution found (highest sparsity with convergence).
         history: List of flattened X values for visualization.
-        objective_history: List of objective values F(X).
-        penalty_history: List of penalty values P(X, alpha).
+        objective_history: List of objective values.
+        penalty_history: List of penalty values.
     """
+
     # Automatically compute mu and L if not provided
     if mu is None or L is None:
-        mu, L = compute_mu_and_L(F)
+        mu, L = compute_mu_and_L(F_obj)
 
     # Initialize variables
     Y = X_init.copy()
@@ -193,22 +214,28 @@ def nesterov_accelerated_gradient(
     A = 1e-4
     L = L if L else L_init
     history = [X.flatten()]
-    objective_history = [F(X)]
+    objective_history = [F_obj(X)]
     penalty_history = []
-    converge = False
-    recent_objectives = []
+    sparsity_history = [measure_sparsity(X, threshold=sparsity_tol)]
     A_history = [A]
-    max_change = 9999
+
+    # Best solution tracking (based on highest sparsity with convergence)
+    X_best = X.copy()
+    best_sparsity = sparsity_history[-1] if sparsity_history else 0
+    best_iteration = 0  # Track the best iteration
+    patience_counter = 0
+    converge = False
+    best_converged_found = False  # Ensure we track a truly converged best solution
 
     if verbose:
         print(
-            "-------------------------------------------------------------------------------------------------------------------------------------------------------"
+            "------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
         )
         print(
-            f"{'Iteration':<10}|{'Objective Value':<25}|{'f_eta(X)':<12}| {'P(X, alpha)':<22}|{'Sum(X)':<10}|{'Validation':<30}"
+            f"{'Iteration':<10}|{'Objective Value':<25}|{'f_eta(X)':<12}| {'P(X, alpha)':<22}|{'Sum(X)':<10}|{'Sparsity':<10}|{'Convergence':<30}"
         )
         print(
-            "-------------------------------------------------------------------------------------------------------------------------------------------------------"
+            "------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
         )
 
     for k in range(max_iter):
@@ -216,11 +243,11 @@ def nesterov_accelerated_gradient(
         if line_search:
             L = L_init  # Reset L to initial guess for each iteration
             while True:
-                GRAD_Y = F.grad(Y)
-                X_temp = project_onto_simplex(Y - (1 / L) * GRAD_Y, F.s)
-                lhs = F(X_temp)
-                rhs = F(Y) - (1 / (2 * L)) * np.linalg.norm(GRAD_Y, ord="fro") ** 2
-                if lhs <= rhs and validate_solution(F, X_temp, eps_tol):
+                GRAD_Y = F_obj.grad(Y)
+                X_temp = project_onto_simplex(Y - (1 / L) * GRAD_Y, F_obj.s)
+                lhs = F_obj(X_temp)
+                rhs = F_obj(Y) - (1 / (2 * L)) * np.linalg.norm(GRAD_Y, ord="fro") ** 2
+                if lhs <= rhs and validate_solution(F_obj, X_temp, 0):
                     break
                 L *= 1 / beta  # Increase L
 
@@ -228,8 +255,8 @@ def nesterov_accelerated_gradient(
         A_new = A / (1 - np.sqrt(mu / L))
 
         # Step 4: Update new X
-        GRAD_Y = F.grad(Y)
-        X_new = project_onto_simplex(Y - (1 / L) * GRAD_Y, F.s)
+        GRAD_Y = F_obj.grad(Y)
+        X_new = project_onto_simplex(Y - (1 / L) * GRAD_Y, F_obj.s)
 
         # Step 5: Update new Y
         decay = (1 - decay_rate) if k % step == 0 and not line_search else 1
@@ -237,40 +264,74 @@ def nesterov_accelerated_gradient(
             X_new - X
         )
 
+        # Compute sparsity
+        sparsity = measure_sparsity(X_new, threshold=sparsity_tol)
+        sparsity_history.append(sparsity)
+
         # Track history
         history.append(X_new.flatten())
-        current_obj = F(X_new)
+        current_obj = F_obj(X_new)
         objective_history.append(current_obj)
-        current_P_alpha = F.P_alpha(X_new)
+        current_P_alpha = F_obj.P_alpha(X_new)
         penalty_history.append(current_P_alpha)
         A_history.append(A_new)
 
+        # Validate and check convergence
+        try:
+            validate_solution(F_obj, X_new, 0)
+            if sparsity >= sparsity_threshold:
+                converge = True
+            else:
+                validation_result = "FAIL: Sparisty too low"
+        except AssertionError as e:
+            converge = False
+            validation_result = f"{str(e)}"
+
         # Verbose output
         if verbose:
-            current_f_eta = F.f_eta(X_new)
+            current_f_eta = F_obj.f_eta(X_new)
             sum_X = np.sum(X_new)
+            convergence_status = "PASS" if converge else validation_result
 
-            # Validation result
-            validation_result = "PASS"
-            try:
-                validate_solution(F, X_new, eps_tol)
-                converge = True
-            except AssertionError as e:
-                validation_result = f"{str(e)}"
-
-            # Print debugging details in tabular format
             print(
-                f"{k + 1:<10}|{current_obj:<25.6f}| {current_f_eta:<11.6f}| {current_P_alpha:<22.6f}|{sum_X:<10.4f}|{validation_result:<30}"
+                f"{k + 1:<10}|{current_obj:<25.6f}| {current_f_eta:<11.6f}| {current_P_alpha:<22.6f}|{sum_X:<10.4f}|{sparsity:<10.4f}|{convergence_status:<30}"
             )
 
-        # Early stopping: If the change in the last 5 objectives is very small
-        if early_stop and len(objective_history) > 5:
-            max_change = np.max(np.abs(np.diff(objective_history[-5:])))
-        if converge:
-            if early_stop and max_change < tol:
+        # Best solution tracking (update only if it's converged and more sparse)
+        # print(converge, sparsity > best_sparsity)
+        if converge and sparsity > best_sparsity:
+            best_sparsity = sparsity
+            X_best = X_new.copy()
+            best_iteration = k + 1  # Track the best iteration (1-based index)
+            patience_counter = 0  # Reset patience
+            best_converged_found = (
+                True  # Mark that a valid converged solution was found
+            )
+        else:
+            patience_counter += 1  # Count iterations without improvement
+        # print(patience_counter, best_converged_found)
+        # Stop early if we have a converged best solution and no improvement in patience steps
+        if patience_counter >= patience and best_converged_found:
+            print(
+                f"Final result taken from iteration {best_iteration} after {patience} iterations without improvement."
+            )
+            break
+
+        # Early stopping criteria (only tracking objective stability now)
+        if isinstance(early_stop, int):
+            if early_stop > 0 and len(objective_history) > early_stop:
+                max_change = np.max(
+                    np.abs(np.diff(objective_history[-1 * early_stop :]))
+                )
+            if (
+                early_stop > 0
+                and len(objective_history) > early_stop
+                and max_change < tol
+                and converge
+            ):
                 print(
-                    f"Early stopping activated at iteration {k + 1}: "
-                    f"Max change in last 5 objectives is {max_change:.6e}."
+                    f"Final result taken from iteration {best_iteration}: "
+                    f"Max objective change = {max_change:.6e}."
                 )
                 break
 
@@ -279,4 +340,4 @@ def nesterov_accelerated_gradient(
         X = X_new
         Y = Y_new
 
-    return X_new, history, objective_history, penalty_history, A_history
+    return X_best, history, objective_history, penalty_history, A_history

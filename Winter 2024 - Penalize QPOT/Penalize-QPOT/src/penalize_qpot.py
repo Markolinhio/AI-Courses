@@ -27,7 +27,7 @@ class f:
         """
         # Compute <C, X> + eta * ||X||_2^2
         inner_product = np.sum(self.C * X)
-        frobenius_norm_squared = np.sum(X**2)
+        frobenius_norm_squared = np.linalg.norm(X, ord="fro") ** 2
         return inner_product + self.eta * frobenius_norm_squared
 
     def grad(self, X):
@@ -151,7 +151,7 @@ class F:
     Combined objective function F(X) = f_eta(X) + P(X, alpha), with gradient computation.
     """
 
-    def __init__(self, C, eta, r, c, alpha, s):
+    def __init__(self, C, eta, r, c, alpha, s, eps_tol=0):
         """
         Args:
             C (np.ndarray): Cost matrix.
@@ -163,12 +163,13 @@ class F:
         """
         self.C = C
         self.eta = eta
-        self.r = r
-        self.c = c
-        self.s = s
         self.alpha = alpha
-        self.f_eta = f(C, eta)
-        self.P_alpha = P(r, c, alpha)
+        self.eps_tol = eps_tol
+        self.r = r + self.eps_tol
+        self.c = c + self.eps_tol
+        self.s = s
+        self.f_eta = f(self.C, self.eta)
+        self.P_alpha = P(self.r, self.c, self.alpha)
 
     def __call__(self, X):
         """
